@@ -1,0 +1,601 @@
+{
+  "name": "order tracking workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "order-update",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2032,
+        -528
+      ],
+      "id": "c2d44c1d-0995-48cb-9a89-1e7d19769f4f",
+      "name": "Webhook",
+      "webhookId": "71ce0d04-3c37-4862-bf5a-3f2cf5eb8c7e"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cd4fa24e-6596-4189-a720-8d11c92faaa4",
+              "leftValue": "={{ $json.headers['x-wc-webhook-topic'] }}",
+              "rightValue": "order.processing",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1824,
+        -528
+      ],
+      "id": "f61eeac3-856c-43b4-9cb6-b1d67a362348",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "binaryData": true,
+        "encoding": "base64"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        -1600,
+        -624
+      ],
+      "id": "aa0bee16-30a2-4226-9573-bb875351d89b",
+      "name": "Crypto",
+      "credentials": {
+        "crypto": {
+          "id": "sDZjgdjeF9sGNIbi",
+          "name": "Crypto account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -1600,
+        -432
+      ],
+      "id": "12edc608-9870-4cba-9b3e-ace6350788d8",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b9a36b24-5225-459a-adcb-7d1d15cbe3a4",
+              "leftValue": "={{ $json.headers['x-wc-webhook-signature'] }}",
+              "rightValue": "={{ $json.data }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1376,
+        -624
+      ],
+      "id": "63d86c2f-d74f-452d-87dd-db10b6579d0e",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const src = $json || {};\nfunction cleanStr(v, space = '') {\n  let s = v == null ? '' : String(v);\n  s = s.replace(/[\\r\\n]+/g, space);\n  if (space === ' ') s = s.replace(/\\s{2,}/g, ' ');\n  return s.trim();\n}\n\nconst out = {\n  order_id: cleanStr(src.order_id || src.body?.order_id || src.id || src.order?.id || src.body?.order?.id),\n  customer_name: cleanStr(\n    src.customer_name || src.body?.customer_name ||\n    (((src.billing?.first_name || src.body?.billing?.first_name || '') + ' ' +\n      (src.billing?.last_name  || src.body?.billing?.last_name  || '')).trim()),\n    ' '\n  ),\n  status_step: Number(cleanStr(src.status_step || src.body?.status_step || 1)),\n  customer_email: cleanStr(src.customer_email || src.body?.customer_email || src.billing?.email || src.body?.billing?.email),\n  secret: cleanStr(src.secret || src.body?.secret || '')\n};\n\nif (!Number.isFinite(out.status_step)) out.status_step = 1;\nreturn [{ json: out }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -768,
+        -640
+      ],
+      "id": "3d47f43c-20d4-4cad-8253-74b42ac22d64",
+      "name": "Sanitize"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "condition-ok",
+              "leftValue": "={{ Boolean($json.ok ?? $json.body?.ok ?? ($json.statusCode >= 200 && $json.statusCode < 300)) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -288,
+        -640
+      ],
+      "id": "ed519b28-dcaf-42cb-83b1-fe78de4cf706",
+      "name": "If: ok?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "log-event",
+              "name": "=event",
+              "value": "=failed_update",
+              "type": "string"
+            },
+            {
+              "id": "log-order-id",
+              "name": "=order_id",
+              "value": "={{$node[\"Sanitize\"].json.order_id}}",
+              "type": "string"
+            },
+            {
+              "id": "log-reason",
+              "name": "=reason",
+              "value": "={{$node[\"HTTP Request\"].json.error || $node[\"HTTP Request\"].json.body?.error || \"unknown\"}}",
+              "type": "string"
+            },
+            {
+              "id": "log-ts",
+              "name": "=ts",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -160,
+        -224
+      ],
+      "id": "b6b167b3-f8b3-48f1-a2d4-bdde87fe2b53",
+      "name": "Build Log"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-order-id",
+              "name": "=order_id",
+              "value": "={{ $json.body.id }}",
+              "type": "string"
+            },
+            {
+              "id": "set-email",
+              "name": "=customer_email",
+              "value": "={{ $json.body.customer.email }}",
+              "type": "string"
+            },
+            {
+              "id": "set-sig",
+              "name": "=sig",
+              "value": "={{$json.headers[\"x-wc-webhook-signature\"]}}",
+              "type": "string"
+            },
+            {
+              "id": "45b79d26-6cef-4c02-9c96-72bb842a8a1c",
+              "name": "customer_name",
+              "value": "={{ $json.body.customer.name }}",
+              "type": "string"
+            },
+            {
+              "id": "8f92daf2-12f9-497d-a854-d0f374a46218",
+              "name": "event_topic",
+              "value": "={{ $('If').item.json.headers['x-wc-webhook-signature'] }}",
+              "type": "string"
+            },
+            {
+              "id": "786e04b4-3b2a-4f9e-9c26-f3f71638765d",
+              "name": "order_status",
+              "value": "={{ $('If').item.json.body.status }}",
+              "type": "string"
+            },
+            {
+              "id": "2c73f4a3-2d22-4d31-9e98-f894317dffe0",
+              "name": "secret",
+              "value": "={{ $('If').item.json.headers['postman-token'] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1008,
+        -640
+      ],
+      "id": "80211e1a-05b9-4033-bd51-eea697b4b35d",
+      "name": "Set"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"ok\": false, \"error\": \"unauthorized or upstream error\"}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        384,
+        -224
+      ],
+      "id": "fed05f76-7a43-4557-bc89-e62f7fd9de51",
+      "name": "Respond to Webhook - False"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://script.google.com/macros/s/AKfycbwV3T_3hCOUjsCPrHMfQSBF2CNzgM1TzyzwyaGjgdqBx5xugK8pbFduN-vT0RzcvWojRA/exec",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "=event",
+              "value": "={{$node[\"Build Log\"].json.event}}"
+            },
+            {
+              "name": "=secret",
+              "value": "Ad1102014A$"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        112,
+        -224
+      ],
+      "id": "5ff87f2b-539b-40b4-980e-7c9b2d8385c8",
+      "name": "HTTP Request - False"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($node[\"HTTP Request\"].json || { ok: true }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        480,
+        -656
+      ],
+      "id": "9c501aad-db7a-400a-9795-d6208641bd7d",
+      "name": "Respond to Webhook - True"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "email-to",
+              "name": "to",
+              "value": "={{ $node[\"Set\"].json.customer_email }}",
+              "type": "string"
+            },
+            {
+              "id": "email-subject",
+              "name": "subject",
+              "value": "=Order Update – Tracking Link for Order #{{$node[\"Sanitize\"].json.order_id}}",
+              "type": "string"
+            },
+            {
+              "id": "email-html",
+              "name": "html",
+              "value": "=<div style=\"font-family:Arial,sans-serif;\">\n  <h2>Order Tracking</h2>\n  <p>Hello {{$node[\"Sanitize\"].json.customer_name}},</p>\n  <p>Your order <strong>#{{$node[\"Sanitize\"].json.order_id}}</strong> is being processed.</p>\n  <p><a href=\"{{$node[\"HTTP Request\"].json.body.tracker_url}}\">Click here to track your order</a></p>\n</div>",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -32,
+        -656
+      ],
+      "id": "94bd1627-96de-4aab-96d6-98872ae47098",
+      "name": "Build Email"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://script.google.com/macros/s/AKfycbxNtC9QsZFkSbYmtMeNILi5L18__4O-63NEHka4T34ltWq7_uXZt-7touLdM5BKhgVi/exec",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"secret\": \"Ad1102014A$\",\n  \"order_id\": \"{{ $json.order_id }}\",\n  \"customer_name\": \"{{ $json.customer_name }}\",\n  \"customer_email\": \"{{ $json.customer_email }}\",\n  \"status_step\": \"{{ $json.status_step }}\"\n}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "maxRedirects": 302
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -496,
+        -640
+      ],
+      "id": "45eeb74a-7b9f-4191-b6aa-9ce0231b7736",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "sendTo": "alaadewer@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        192,
+        -656
+      ],
+      "id": "1fc68159-6272-411d-bec3-4009006690cf",
+      "name": "Send a message",
+      "webhookId": "db698278-1cf3-40ce-9b7b-6e4e08811d7d",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "2OLjlvDItw9huLEi",
+          "name": "Gmail account 3"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Crypto",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sanitize": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If: ok?": {
+      "main": [
+        [
+          {
+            "node": "Build Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Log": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - False",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set": {
+      "main": [
+        [
+          {
+            "node": "Sanitize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - False": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook - False",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Email": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "If: ok?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Set",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook - True",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "f5a9764a-15cb-4ee4-a490-9f9377eb1f77",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "18623f4fb0b58c10dd0ec0579a37515cef5797444e29bfc1fd089e220f57b96b"
+  },
+  "nodeGroups": [],
+  "id": "3w0mUxNVMTwQ4ik7",
+  "tags": []
+}
